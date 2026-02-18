@@ -1,0 +1,30 @@
+# .gitignore
+
+# Go
+backend/server
+*.exe
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml
+
+# Temp
+*.tmp
+*.log
+conversions/
+
+# Env (secrets)
+.env

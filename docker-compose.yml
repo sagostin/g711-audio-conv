@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  audio-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: audio-converter
+    expose:
+      - "8080"
+    environment:
+      - PORT=8080
+      - PROXY_HEADER=${PROXY_HEADER:-X-Forwarded-For}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-200}
+      - CONVERSIONS_DIR=/app/conversions
+      - EASTER_EGG_IPS=${EASTER_EGG_IPS:-}
+    volumes:
+      - conversions-data:/app/conversions
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: audio-converter-caddy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:-localhost}
+      - TLS_EMAIL=${TLS_EMAIL:-internal}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-200}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      audio-converter:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  conversions-data:
+  caddy-data:
+  caddy-config:

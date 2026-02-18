@@ -1,0 +1,49 @@
+{$SITE_ADDRESS:localhost} {
+	# TLS configuration
+	# When SITE_ADDRESS is a real domain, Caddy auto-provisions Let's Encrypt certs.
+	# For localhost, it uses a self-signed cert.
+	tls {$TLS_EMAIL:internal}
+
+	# Upload size limit (matches backend MAX_UPLOAD_MB)
+	request_body {
+		max_size {$MAX_UPLOAD_MB:200}MB
+	}
+
+	# Proxy all API requests to the backend
+	handle /api/* {
+		reverse_proxy audio-converter:8080 {
+			# Forward real client IP
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			# Timeouts for large file uploads/conversions
+			transport http {
+				response_header_timeout 300s
+				dial_timeout 10s
+			}
+		}
+	}
+
+	# Serve frontend static files from the backend's static serving
+	handle {
+		reverse_proxy audio-converter:8080
+	}
+
+	# Security headers
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Compress responses
+	encode gzip zstd
+
+	# Access logging
+	log {
+		output stdout
+		format console
+	}
+}
