@@ -97,6 +97,7 @@
               <ConversionOptions
                 :options="options"
                 :formats="formats"
+                :prefixes="prefixes"
                 :disabled="isProcessing"
                 @update:options="Object.assign(options, $event)"
               />
@@ -129,6 +130,7 @@ const {
   files,
   options,
   formats,
+  prefixes,
   isProcessing,
   hasFiles,
   hasPendingFiles,
@@ -145,6 +147,7 @@ const {
   downloadFile,
   downloadAllAsZip,
   loadFormats,
+  loadPrefixes,
 } = useConverter()
 
 const convertButtonLabel = computed(() => {
@@ -165,6 +168,7 @@ function downloadFirstDone() {
 
 onMounted(() => {
   loadFormats()
+  loadPrefixes()
   checkEasterEgg()
 })
 

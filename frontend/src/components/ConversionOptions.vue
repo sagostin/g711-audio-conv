@@ -99,20 +99,10 @@
     <div class="prefix-reference">
       <div class="prefix-title">File Prefix Guide</div>
       <div class="prefix-grid">
-        <div class="prefix-item">
-          <span class="badge badge-green">aa_</span>
-          <span>Auto Attendant</span>
-          <span class="prefix-db">-6 dB</span>
-        </div>
-        <div class="prefix-item">
-          <span class="badge badge-amber">mbx_</span>
-          <span>Mailbox Greeting</span>
-          <span class="prefix-db">-6 dB</span>
-        </div>
-        <div class="prefix-item">
-          <span class="badge badge-purple">moh_</span>
-          <span>Hold Music</span>
-          <span class="prefix-db">-20 dB</span>
+        <div v-for="p in prefixes" :key="p.prefix" class="prefix-item">
+          <span class="badge" :class="prefixBadgeClass(p)">{{ p.prefix }}</span>
+          <span>{{ p.description }}</span>
+          <span class="prefix-db">{{ p.targetDb }} dB</span>
         </div>
       </div>
     </div>
@@ -120,13 +110,23 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   options: { type: Object, required: true },
   formats: { type: Array, default: () => [] },
+  prefixes: { type: Array, default: () => [] },
   disabled: { type: Boolean, default: false },
 })
 
 defineEmits(['update:options'])
+
+function prefixBadgeClass(prefix) {
+  switch (prefix.label) {
+    case 'auto_attendant': return 'badge-green'
+    case 'mailbox_greeting': return 'badge-amber'
+    case 'hold_music': return 'badge-purple'
+    default: return 'badge-blue'
+  }
+}
 </script>
 
 <style scoped>

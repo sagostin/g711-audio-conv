@@ -245,6 +245,18 @@ export function useConverter() {
         }
     }
 
+    // Load prefixes from backend
+    async function loadPrefixes() {
+        try {
+            const res = await fetch(`${API_BASE}/prefixes`)
+            if (res.ok) {
+                prefixes.value = await res.json()
+            }
+        } catch {
+            // Use defaults
+        }
+    }
+
     return {
         files,
         options,
@@ -267,5 +279,6 @@ export function useConverter() {
         downloadFile,
         downloadAllAsZip,
         loadFormats,
+        loadPrefixes,
     }
 }
