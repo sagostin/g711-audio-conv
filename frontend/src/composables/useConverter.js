@@ -1,4 +1,5 @@
 import { ref, reactive, computed } from 'vue'
+import JSZip from 'jszip'
 
 const API_BASE = '/api'
 
@@ -12,13 +13,6 @@ const defaultPrefixes = [
 export function useConverter() {
     // State
     const files = ref([])
-    const isUploading = ref(false)
-    const isConverting = ref(false)
-    const uploadProgress = ref(0)
-    const conversionStatus = ref('') // idle, uploading, converting, done, error
-    const resultUrl = ref(null)
-    const resultFilename = ref('')
-    const error = ref('')
 
     const options = reactive({
         format: 'wav-pcm',
@@ -39,10 +33,35 @@ export function useConverter() {
 
     // Computed
     const hasFiles = computed(() => files.value.length > 0)
-    const isBulk = computed(() => {
-        return files.value.length > 1 || (files.value.length === 1 && files.value[0].name.toLowerCase().endsWith('.zip'))
+    const isProcessing = computed(() => files.value.some(f => f.status === 'converting'))
+
+    const pendingFiles = computed(() => files.value.filter(f => f.status === 'pending'))
+    const doneFiles = computed(() => files.value.filter(f => f.status === 'done'))
+    const errorFiles = computed(() => files.value.filter(f => f.status === 'error'))
+    const hasPendingFiles = computed(() => pendingFiles.value.length > 0)
+    const hasDoneFiles = computed(() => doneFiles.value.length > 0)
+
+    // Overall status for the progress tracker
+    const overallStatus = computed(() => {
+        if (files.value.length === 0) return ''
+        if (files.value.some(f => f.status === 'converting')) return 'converting'
+        if (files.value.every(f => f.status === 'done')) return 'done'
+        if (files.value.some(f => f.status === 'done') && !files.value.some(f => f.status === 'converting' || f.status === 'pending')) {
+            // Some done, some error, none pending/converting
+            return files.value.some(f => f.status === 'error') ? 'partial' : 'done'
+        }
+        if (files.value.every(f => f.status === 'error')) return 'error'
+        return ''
     })
-    const isProcessing = computed(() => isUploading.value || isConverting.value)
+
+    const overallProgress = computed(() => {
+        const total = files.value.length
+        if (total === 0) return 0
+        const completed = files.value.filter(f => f.status === 'done' || f.status === 'error').length
+        const inProgress = files.value.filter(f => f.status === 'converting')
+        const progressFromConverting = inProgress.reduce((sum, f) => sum + f.progress, 0) / total
+        return Math.round(((completed / total) * 100) + progressFromConverting)
+    })
 
     // Detect prefix for a filename
     function detectPrefix(filename) {
@@ -57,96 +76,95 @@ export function useConverter() {
 
     // Add files from input or drop
     function addFiles(fileList) {
-        error.value = ''
         const newFiles = Array.from(fileList).map(f => ({
+            id: crypto.randomUUID(),
             file: f,
             name: f.name,
             size: f.size,
             prefix: detectPrefix(f.name),
+            status: 'pending',  // pending | converting | done | error
+            progress: 0,
+            error: '',
+            resultBlob: null,
+            resultFilename: '',
         }))
         files.value = [...files.value, ...newFiles]
     }
 
-    function removeFile(index) {
-        files.value.splice(index, 1)
+    function removeFile(id) {
+        const file = files.value.find(f => f.id === id)
+        if (file && file.resultBlob) {
+            URL.revokeObjectURL(file._objectUrl)
+        }
+        files.value = files.value.filter(f => f.id !== id)
     }
 
     function clearFiles() {
+        // Clean up all blob URLs
+        for (const f of files.value) {
+            if (f._objectUrl) {
+                URL.revokeObjectURL(f._objectUrl)
+            }
+        }
         files.value = []
-        resultUrl.value = null
-        resultFilename.value = ''
-        error.value = ''
-        conversionStatus.value = ''
-        uploadProgress.value = 0
     }
 
-    // Upload and convert
-    async function uploadAndConvert() {
-        if (!hasFiles.value) return
+    // Convert all pending files independently
+    async function convertAll() {
+        const toConvert = files.value.filter(f => f.status === 'pending' || f.status === 'error')
+        if (toConvert.length === 0) return
 
-        error.value = ''
-        isUploading.value = true
-        conversionStatus.value = 'uploading'
-        uploadProgress.value = 0
+        // Reset error files back to pending
+        toConvert.forEach(f => {
+            f.status = 'converting'
+            f.progress = 0
+            f.error = ''
+        })
 
-        // Clean up previous result URL
-        if (resultUrl.value) {
-            URL.revokeObjectURL(resultUrl.value)
-            resultUrl.value = null
+        // Convert each file independently (concurrent, max 3 at a time)
+        const concurrency = 3
+        const queue = [...toConvert]
+
+        async function processNext() {
+            while (queue.length > 0) {
+                const file = queue.shift()
+                await convertSingleFile(file)
+            }
         }
 
+        const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => processNext())
+        await Promise.all(workers)
+    }
+
+    // Convert a single file via /api/convert
+    async function convertSingleFile(fileEntry) {
         const formData = new FormData()
+        formData.append('file', fileEntry.file)
         formData.append('format', options.format)
         formData.append('normalize', options.normalize ? 'true' : 'false')
         formData.append('bandpass', options.bandpass ? 'true' : 'false')
         formData.append('bandpass_low', options.bandpassLow.toString())
         formData.append('bandpass_high', options.bandpassHigh.toString())
 
-        let endpoint = `${API_BASE}/convert`
-
-        if (isBulk.value && !files.value[0].name.toLowerCase().endsWith('.zip')) {
-            // Multiple files: create a ZIP on the client side
-            // For now, we only support single file or ZIP upload
-            // If multiple files, we convert them one-by-one
-            // TODO: client-side ZIP creation for multi-file uploads
-            // For now, convert first file only
-            formData.append('file', files.value[0].file)
-        } else if (files.value[0].name.toLowerCase().endsWith('.zip')) {
-            endpoint = `${API_BASE}/convert/bulk`
-            formData.append('file', files.value[0].file)
-        } else {
-            formData.append('file', files.value[0].file)
-        }
-
         try {
-            const blob = await uploadWithProgress(endpoint, formData, (progress) => {
-                uploadProgress.value = progress
-                if (progress >= 100) {
-                    isUploading.value = false
-                    isConverting.value = true
-                    conversionStatus.value = 'converting'
+            const blob = await uploadWithProgress(
+                `${API_BASE}/convert`,
+                formData,
+                (progress) => {
+                    fileEntry.progress = progress
                 }
-            })
+            )
 
-            isConverting.value = false
-            conversionStatus.value = 'done'
+            fileEntry.status = 'done'
+            fileEntry.resultBlob = blob
 
-            resultUrl.value = URL.createObjectURL(blob)
+            // Determine output filename
+            const baseName = fileEntry.name.replace(/\.[^.]+$/, '')
+            fileEntry.resultFilename = baseName + '_converted.wav'
 
-            // Determine filename from content-disposition or generate one
-            const isZip = files.value[0].name.toLowerCase().endsWith('.zip')
-            if (isZip) {
-                resultFilename.value = files.value[0].name.replace('.zip', '_converted.zip')
-            } else {
-                const baseName = files.value[0].name.replace(/\.[^.]+$/, '')
-                const formatObj = formats.value.find(f => f.id === options.format)
-                resultFilename.value = baseName + '_converted' + (formatObj ? '.wav' : '.wav')
-            }
         } catch (err) {
-            isUploading.value = false
-            isConverting.value = false
-            conversionStatus.value = 'error'
-            error.value = err.message || 'Conversion failed'
+            fileEntry.status = 'error'
+            fileEntry.error = err.message || 'Conversion failed'
         }
     }
 
@@ -178,14 +196,41 @@ export function useConverter() {
         })
     }
 
-    function downloadResult() {
-        if (!resultUrl.value) return
+    // Download a single converted file
+    function downloadFile(id) {
+        const file = files.value.find(f => f.id === id)
+        if (!file || !file.resultBlob) return
+
+        if (!file._objectUrl) {
+            file._objectUrl = URL.createObjectURL(file.resultBlob)
+        }
         const a = document.createElement('a')
-        a.href = resultUrl.value
-        a.download = resultFilename.value
+        a.href = file._objectUrl
+        a.download = file.resultFilename
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
+    }
+
+    // Download all converted files as a ZIP
+    async function downloadAllAsZip() {
+        const completed = files.value.filter(f => f.status === 'done' && f.resultBlob)
+        if (completed.length === 0) return
+
+        const zip = new JSZip()
+        for (const f of completed) {
+            zip.file(f.resultFilename, f.resultBlob)
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        const url = URL.createObjectURL(zipBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'converted_audio.zip'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     // Load formats from backend
@@ -205,22 +250,22 @@ export function useConverter() {
         options,
         formats,
         prefixes,
-        isUploading,
-        isConverting,
         isProcessing,
-        uploadProgress,
-        conversionStatus,
-        resultUrl,
-        resultFilename,
-        error,
         hasFiles,
-        isBulk,
+        hasPendingFiles,
+        hasDoneFiles,
+        pendingFiles,
+        doneFiles,
+        errorFiles,
+        overallStatus,
+        overallProgress,
         detectPrefix,
         addFiles,
         removeFile,
         clearFiles,
-        uploadAndConvert,
-        downloadResult,
+        convertAll,
+        downloadFile,
+        downloadAllAsZip,
         loadFormats,
     }
 }

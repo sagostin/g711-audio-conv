@@ -52,36 +52,41 @@
                 @add="addFiles"
                 @remove="removeFile"
                 @clear="clearFiles"
+                @download="downloadFile"
               />
             </div>
 
             <!-- Progress -->
             <ProgressTracker
-              :status="conversionStatus"
-              :progress="uploadProgress"
-              :errorMessage="error"
+              :status="overallStatus"
+              :progress="overallProgress"
+              :doneCount="doneFiles.length"
+              :totalCount="files.length"
+              :errorCount="errorFiles.length"
             />
 
             <!-- Results -->
             <ResultsPanel
-              :resultUrl="resultUrl"
-              :filename="resultFilename"
-              @download="downloadResult"
+              :hasDoneFiles="hasDoneFiles"
+              :doneCount="doneFiles.length"
+              :totalCount="files.length"
+              @downloadAll="downloadAllAsZip"
+              @downloadFirst="downloadFirstDone"
               @reset="clearFiles"
             />
 
             <!-- Convert Button -->
-            <div v-if="hasFiles && conversionStatus !== 'done'" class="convert-action">
+            <div v-if="hasFiles && (hasPendingFiles || errorFiles.length > 0)" class="convert-action">
               <button
                 class="btn btn-primary btn-lg convert-btn"
-                :disabled="isProcessing || !hasFiles"
-                @click="uploadAndConvert"
+                :disabled="isProcessing"
+                @click="convertAll"
               >
                 <svg v-if="!isProcessing" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
                 <div v-else class="spinner"></div>
-                {{ isProcessing ? 'Processing...' : 'Convert Audio' }}
+                {{ convertButtonLabel }}
               </button>
             </div>
           </div>
@@ -102,9 +107,9 @@
         <!-- Footer info -->
         <footer class="app-footer">
           <div class="footer-info">
-            <span>Max file size: 50MB • Max ZIP: 200MB</span>
+            <span>Max file size: 50MB per file</span>
             <span>•</span>
-            <span>Supports: MP3, WAV, OGG, FLAC, M4A, AAC, ZIP</span>
+            <span>Supports: MP3, WAV, OGG, FLAC, M4A, AAC</span>
           </div>
         </footer>
       </div>
@@ -113,7 +118,7 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import FileUpload from './components/FileUpload.vue'
 import ConversionOptions from './components/ConversionOptions.vue'
 import ProgressTracker from './components/ProgressTracker.vue'
@@ -125,19 +130,38 @@ const {
   options,
   formats,
   isProcessing,
-  uploadProgress,
-  conversionStatus,
-  resultUrl,
-  resultFilename,
-  error,
   hasFiles,
+  hasPendingFiles,
+  hasDoneFiles,
+  pendingFiles,
+  doneFiles,
+  errorFiles,
+  overallStatus,
+  overallProgress,
   addFiles,
   removeFile,
   clearFiles,
-  uploadAndConvert,
-  downloadResult,
+  convertAll,
+  downloadFile,
+  downloadAllAsZip,
   loadFormats,
 } = useConverter()
+
+const convertButtonLabel = computed(() => {
+  if (isProcessing.value) return 'Converting...'
+  const pending = pendingFiles.value.length
+  const errors = errorFiles.value.length
+  const retryCount = pending + errors
+  if (doneFiles.value.length > 0 && retryCount > 0) {
+    return `Convert ${retryCount} New File${retryCount > 1 ? 's' : ''}`
+  }
+  return `Convert ${retryCount} File${retryCount > 1 ? 's' : ''}`
+})
+
+function downloadFirstDone() {
+  const first = doneFiles.value[0]
+  if (first) downloadFile(first.id)
+}
 
 onMounted(() => {
   loadFormats()
