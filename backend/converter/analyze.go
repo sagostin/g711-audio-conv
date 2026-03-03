@@ -79,32 +79,26 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 	return stats, nil
 }
 
-// BuildNormalizationFilters constructs filter strings for precise linear normalization.
+// BuildNormalizationFilters constructs a filter for precise peak-based normalization.
 //
-// Instead of using loudnorm (which allows an LRA tolerance range around the target,
-// causing output to exceed the desired level), we use a simpler, more predictable approach:
+// Scales the entire audio so the highest true peak sits exactly at the target dB.
+// Everything else falls proportionally below — the dynamic range is perfectly preserved
+// and nothing can exceed the target.
 //
-//  1. volume filter — applies the exact dB gain delta (target - measured) as a linear scalar
-//  2. alimiter — hard brick-wall limiter to enforce a true peak ceiling
+// This is more predictable for telephony than loudness-based (LUFS) normalization,
+// where integrated loudness hits the target but peaks can freely exceed it.
 //
-// This ensures the output never exceeds the target level, which is critical for
-// telephony applications where strict level compliance matters.
+// Gain formula: targetDB - measuredTruePeak
+// Example: target -6 dB, measured peak -2 dBTP → gain = -4 dB (scales down to fit)
+//
+//	target -6 dB, measured peak -12 dBTP → gain = +6 dB (scales up to fit)
 //
 // See: https://superuser.com/questions/1434096/ffmpeg-loudnorm-filter-without-target-range
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
-	// Calculate the gain needed: target - measured integrated loudness
-	gainDB := targetDB - stats.InputLoudness
+	// Calculate gain to place the true peak exactly at the target level
+	gainDB := targetDB - stats.InputTruePeak
 
-	var filters []string
-
-	// Apply linear volume adjustment (exact dB delta)
-	filters = append(filters, fmt.Sprintf("volume=%.2fdB", gainDB))
-
-	// Hard limiter to enforce true peak ceiling at -1.5 dBTP
-	// This prevents any peaks from exceeding the absolute maximum
-	filters = append(filters, "alimiter=limit=-1.5dB:level=false")
-
-	return filters
+	return []string{fmt.Sprintf("volume=%.2fdB", gainDB)}
 }
 
 // parseFloat converts a string to float64, returning 0 on error.
