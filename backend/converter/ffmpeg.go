@@ -121,17 +121,17 @@ func Convert(opts ConvertOptions) ConvertResult {
 		filters = append(filters, fmt.Sprintf("lowpass=f=%.0f", high))
 	}
 
-	// Two-pass normalization via loudnorm
+	// Linear normalization via volume + hard limiter
 	if opts.Normalize {
 		// Pass 1: Measure input loudness statistics
 		inputStats, err := AnalyzeAudio(opts.InputPath)
 		if err != nil {
-			// Fall back to single-pass if measurement fails
+			// Fall back to simple loudnorm if measurement fails
 			filters = append(filters, fmt.Sprintf("loudnorm=I=%.1f:TP=-1.5:LRA=11", opts.TargetDB))
 		} else {
 			result.InputStats = inputStats
-			// Pass 2: Use measured values for precise linear normalization
-			filters = append(filters, BuildTwoPassLoudnormFilter(inputStats, opts.TargetDB))
+			// Apply exact linear gain + hard limiter (no LRA tolerance)
+			filters = append(filters, BuildNormalizationFilters(inputStats, opts.TargetDB)...)
 		}
 	}
 

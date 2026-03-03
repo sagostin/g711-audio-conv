@@ -79,22 +79,32 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 	return stats, nil
 }
 
-// BuildTwoPassLoudnormFilter constructs the loudnorm filter string for the second
-// pass of two-pass normalization. This feeds the measured values from the first pass
-// back into loudnorm so it can apply precise linear normalization instead of
-// falling back to dynamic mode (which can alter the audio's dynamic range).
+// BuildNormalizationFilters constructs filter strings for precise linear normalization.
 //
-// Two-pass is recommended for all file-based (non-live) audio processing.
-// See: https://superuser.com/questions/323119/how-can-i-normalize-audio-using-ffmpeg
-func BuildTwoPassLoudnormFilter(stats AudioStats, targetDB float64) string {
-	return fmt.Sprintf(
-		"loudnorm=I=%.1f:TP=-1.5:LRA=11:measured_I=%.1f:measured_TP=%.1f:measured_LRA=%.1f:measured_thresh=%.1f:linear=true:print_format=json",
-		targetDB,
-		stats.InputLoudness,
-		stats.InputTruePeak,
-		stats.InputLRA,
-		stats.InputThreshold,
-	)
+// Instead of using loudnorm (which allows an LRA tolerance range around the target,
+// causing output to exceed the desired level), we use a simpler, more predictable approach:
+//
+//  1. volume filter — applies the exact dB gain delta (target - measured) as a linear scalar
+//  2. alimiter — hard brick-wall limiter to enforce a true peak ceiling
+//
+// This ensures the output never exceeds the target level, which is critical for
+// telephony applications where strict level compliance matters.
+//
+// See: https://superuser.com/questions/1434096/ffmpeg-loudnorm-filter-without-target-range
+func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
+	// Calculate the gain needed: target - measured integrated loudness
+	gainDB := targetDB - stats.InputLoudness
+
+	var filters []string
+
+	// Apply linear volume adjustment (exact dB delta)
+	filters = append(filters, fmt.Sprintf("volume=%.2fdB", gainDB))
+
+	// Hard limiter to enforce true peak ceiling at -1.5 dBTP
+	// This prevents any peaks from exceeding the absolute maximum
+	filters = append(filters, "alimiter=limit=-1.5dB:level=false")
+
+	return filters
 }
 
 // parseFloat converts a string to float64, returning 0 on error.
