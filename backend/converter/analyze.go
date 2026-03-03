@@ -79,26 +79,30 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 	return stats, nil
 }
 
-// BuildNormalizationFilters constructs a filter for precise peak-based normalization.
+// BuildNormalizationFilters constructs filters for telephony-grade normalization.
 //
-// Scales the entire audio so the highest true peak sits exactly at the target dB.
-// Everything else falls proportionally below — the dynamic range is perfectly preserved
-// and nothing can exceed the target.
+// The chain does two things:
 //
-// This is more predictable for telephony than loudness-based (LUFS) normalization,
-// where integrated loudness hits the target but peaks can freely exceed it.
+//  1. dynaudnorm — adaptive frame-by-frame gain control that evens out the audio:
+//     quiet sections are brought up, loud sections are held steady. This makes the
+//     whole file sound roughly the same level (like an AGC / compressor).
+//     Output peaks land near 0 dBFS.
 //
-// Gain formula: targetDB - measuredTruePeak
-// Example: target -6 dB, measured peak -2 dBTP → gain = -4 dB (scales down to fit)
+//  2. volume — since dynaudnorm brings peaks to ~0 dBFS, this simple scalar
+//     shifts the entire waveform down to the exact target dB ceiling.
+//     Nothing can exceed the target.
 //
-//	target -6 dB, measured peak -12 dBTP → gain = +6 dB (scales up to fit)
-//
-// See: https://superuser.com/questions/1434096/ffmpeg-loudnorm-filter-without-target-range
+// Parameters:
+//   - p=0.95: dynaudnorm peak target (95% = -0.45 dBFS headroom)
+//   - s=5: 5-second smoothing window for natural-sounding gain changes
+//   - targetDB: applied as a volume scalar after dynaudnorm flattening
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
-	// Calculate gain to place the true peak exactly at the target level
-	gainDB := targetDB - stats.InputTruePeak
-
-	return []string{fmt.Sprintf("volume=%.2fdB", gainDB)}
+	return []string{
+		// Step 1: Compress dynamic range — even out all levels
+		"dynaudnorm=p=0.95:s=5",
+		// Step 2: Scale peak to target (dynaudnorm outputs near 0 dBFS)
+		fmt.Sprintf("volume=%.2fdB", targetDB),
+	}
 }
 
 // parseFloat converts a string to float64, returning 0 on error.

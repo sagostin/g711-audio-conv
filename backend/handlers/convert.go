@@ -87,8 +87,8 @@ func ConvertHandler(maxUploadMB int64) http.HandlerFunc {
 		// Detect file prefix for normalization
 		fileType := converter.DetectPrefix(header.Filename)
 		if opts.Normalize {
-			// Use user-specified target_db if provided, otherwise fall back to prefix default
-			if opts.TargetDB == 0 {
+			// Recognized prefix overrides manual target; manual slider is fallback for unknown files
+			if fileType.Prefix != "" {
 				opts.TargetDB = fileType.TargetDB
 			}
 		}

@@ -132,8 +132,8 @@ func BulkConvertHandler(maxUploadMB int64) http.HandlerFunc {
 			fileOpts.OutputPath = filepath.Join(outputDir, outputName)
 
 			if fileOpts.Normalize {
-				// Use user-specified target_db if provided, otherwise fall back to prefix default
-				if fileOpts.TargetDB == 0 {
+				// Recognized prefix overrides manual target; manual slider is fallback for unknown files
+				if fileType.Prefix != "" {
 					fileOpts.TargetDB = fileType.TargetDB
 				}
 			}
