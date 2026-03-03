@@ -132,16 +132,42 @@ func BulkConvertHandler(maxUploadMB int64) http.HandlerFunc {
 			fileOpts.OutputPath = filepath.Join(outputDir, outputName)
 
 			if fileOpts.Normalize {
-				fileOpts.TargetDB = fileType.TargetDB
+				// Use user-specified target_db if provided, otherwise fall back to prefix default
+				if fileOpts.TargetDB == 0 {
+					fileOpts.TargetDB = fileType.TargetDB
+				}
+			}
+
+			// Analyze input audio
+			inputStats, inputErr := converter.AnalyzeAudio(audioFile)
+			if inputErr != nil {
+				log.Printf("Job %s: INPUT analysis failed for %s — %v", jobID, baseName, inputErr)
+			} else {
+				log.Printf("Job %s: INPUT  [%s] — %s", jobID, baseName, inputStats.FormatStats())
 			}
 
 			result := converter.Convert(fileOpts)
 
 			if result.Success {
 				successCount++
+
+				// Analyze output audio
+				outputStats, outputErr := converter.AnalyzeAudio(fileOpts.OutputPath)
+				if outputErr != nil {
+					log.Printf("Job %s: OUTPUT analysis failed for %s — %v", jobID, baseName, outputErr)
+				} else {
+					log.Printf("Job %s: OUTPUT [%s] — %s", jobID, baseName, outputStats.FormatStats())
+				}
+
 				logEntries = append(logEntries, fmt.Sprintf("[OK]  %s", baseName))
-				logEntries = append(logEntries, fmt.Sprintf("      Type: %s | Normalization: %.1f dB | Output: %s",
-					fileType.Description, fileType.TargetDB, outputName))
+				logEntries = append(logEntries, fmt.Sprintf("      Type: %s | Target: %.1f dB | Output: %s",
+					fileType.Description, fileOpts.TargetDB, outputName))
+				if inputErr == nil {
+					logEntries = append(logEntries, fmt.Sprintf("      INPUT  — %s", inputStats.FormatStats()))
+				}
+				if outputErr == nil {
+					logEntries = append(logEntries, fmt.Sprintf("      OUTPUT — %s", outputStats.FormatStats()))
+				}
 			} else {
 				failCount++
 				logEntries = append(logEntries, fmt.Sprintf("[FAIL] %s", baseName))

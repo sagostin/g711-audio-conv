@@ -76,9 +76,17 @@ type ConvertResult struct {
 	BandpassHigh float64
 	Error        string
 	FFmpegCmd    string
+	InputStats   AudioStats
+	OutputStats  AudioStats
 }
 
 // Convert runs ffmpeg to convert an audio file with the given options.
+// When normalization is enabled, it uses a two-pass approach:
+//
+//	Pass 1: AnalyzeAudio() measures input loudness stats
+//	Pass 2: Feeds measured values into loudnorm with linear=true for precise normalization
+//
+// This avoids single-pass dynamic mode which can alter the audio's dynamic range.
 func Convert(opts ConvertOptions) ConvertResult {
 	result := ConvertResult{
 		Format:       opts.Format,
@@ -113,11 +121,18 @@ func Convert(opts ConvertOptions) ConvertResult {
 		filters = append(filters, fmt.Sprintf("lowpass=f=%.0f", high))
 	}
 
-	// Normalization via volume filter
+	// Two-pass normalization via loudnorm
 	if opts.Normalize {
-		// Use loudnorm for two-pass or volume for simple gain adjustment
-		// We use a measured approach: first normalize to target dB using loudnorm
-		filters = append(filters, fmt.Sprintf("loudnorm=I=%.1f:TP=-1.5:LRA=11", opts.TargetDB))
+		// Pass 1: Measure input loudness statistics
+		inputStats, err := AnalyzeAudio(opts.InputPath)
+		if err != nil {
+			// Fall back to single-pass if measurement fails
+			filters = append(filters, fmt.Sprintf("loudnorm=I=%.1f:TP=-1.5:LRA=11", opts.TargetDB))
+		} else {
+			result.InputStats = inputStats
+			// Pass 2: Use measured values for precise linear normalization
+			filters = append(filters, BuildTwoPassLoudnormFilter(inputStats, opts.TargetDB))
+		}
 	}
 
 	// Build ffmpeg command
@@ -146,7 +161,7 @@ func Convert(opts ConvertOptions) ConvertResult {
 
 	result.FFmpegCmd = "ffmpeg " + strings.Join(args, " ")
 
-	// Execute ffmpeg
+	// Execute ffmpeg (pass 2 when normalizing, or single pass otherwise)
 	cmd := exec.Command("ffmpeg", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

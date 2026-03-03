@@ -27,7 +27,7 @@
     <div class="toggle-wrapper">
       <div class="toggle-label">
         <span class="toggle-label-text">Audio Normalization</span>
-        <span class="toggle-label-desc">Auto-adjusts based on file prefix (aa_: -6dB, moh_: -20dB)</span>
+        <span class="toggle-label-desc">Normalize loudness using EBU R128 (loudnorm)</span>
       </div>
       <label class="toggle">
         <input
@@ -39,6 +39,53 @@
         <span class="toggle-slider"></span>
       </label>
     </div>
+
+    <!-- Normalization Level (shown when enabled) -->
+    <Transition name="slide">
+      <div v-if="options.normalize" class="norm-level-section">
+        <div class="form-group">
+          <label class="form-label">Target Level (LUFS)</label>
+          <div class="slider-row">
+            <input
+              type="range"
+              class="range-slider"
+              :value="options.targetDb"
+              @input="$emit('update:options', { ...options, targetDb: parseFloat($event.target.value) })"
+              min="-50"
+              max="0"
+              step="0.5"
+              :disabled="disabled"
+            />
+            <div class="db-input-wrapper">
+              <input
+                type="number"
+                class="form-input db-input"
+                :value="options.targetDb"
+                @input="$emit('update:options', { ...options, targetDb: clampDb(parseFloat($event.target.value)) })"
+                min="-50"
+                max="0"
+                step="0.5"
+                :disabled="disabled"
+              />
+              <span class="db-unit">dB</span>
+            </div>
+          </div>
+          <div class="slider-presets">
+            <button
+              v-for="preset in presets"
+              :key="preset.value"
+              class="preset-btn"
+              :class="{ active: options.targetDb === preset.value }"
+              @click="$emit('update:options', { ...options, targetDb: preset.value })"
+              :disabled="disabled"
+            >{{ preset.label }}</button>
+          </div>
+          <div class="range-hint">
+            Lower values = quieter output. Common: -6 dB (voice), -14 dB (broadcast), -20 dB (music on hold)
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Bandpass Filter Toggle -->
     <div class="toggle-wrapper">
@@ -97,13 +144,16 @@
 
     <!-- Prefix Reference -->
     <div class="prefix-reference">
-      <div class="prefix-title">File Prefix Guide</div>
+      <div class="prefix-title">File Prefix Defaults</div>
       <div class="prefix-grid">
         <div v-for="p in prefixes" :key="p.prefix" class="prefix-item">
           <span class="badge" :class="prefixBadgeClass(p)">{{ p.prefix }}</span>
           <span>{{ p.description }}</span>
           <span class="prefix-db">{{ p.targetDb }} dB</span>
         </div>
+      </div>
+      <div class="prefix-note">
+        Prefix defaults are used when no custom target level is set
       </div>
     </div>
   </div>
@@ -118,6 +168,18 @@ const props = defineProps({
 })
 
 defineEmits(['update:options'])
+
+const presets = [
+  { label: '-6 dB', value: -6 },
+  { label: '-14 dB', value: -14 },
+  { label: '-20 dB', value: -20 },
+  { label: '-24 dB', value: -24 },
+]
+
+function clampDb(val) {
+  if (isNaN(val)) return -6
+  return Math.max(-50, Math.min(0, val))
+}
 
 function prefixBadgeClass(prefix) {
   switch (prefix.label) {
@@ -201,6 +263,104 @@ function prefixBadgeClass(prefix) {
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
   color: var(--accent-cyan);
+}
+.prefix-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Normalization level section */
+.norm-level-section {
+  padding: 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.range-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.3), rgba(6, 182, 212, 0.3));
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+  transition: transform 0.15s ease;
+}
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.range-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+.db-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.db-input {
+  width: 72px;
+  text-align: center;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+}
+.db-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.slider-presets {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.preset-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.preset-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+.preset-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
 }
 
 /* Slide transition */

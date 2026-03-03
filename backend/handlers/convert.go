@@ -87,7 +87,10 @@ func ConvertHandler(maxUploadMB int64) http.HandlerFunc {
 		// Detect file prefix for normalization
 		fileType := converter.DetectPrefix(header.Filename)
 		if opts.Normalize {
-			opts.TargetDB = fileType.TargetDB
+			// Use user-specified target_db if provided, otherwise fall back to prefix default
+			if opts.TargetDB == 0 {
+				opts.TargetDB = fileType.TargetDB
+			}
 		}
 
 		// Create unique job directory
@@ -125,7 +128,19 @@ func ConvertHandler(maxUploadMB int64) http.HandlerFunc {
 		opts.InputPath = inputPath
 		opts.OutputPath = outputPath
 
-		// Run conversion
+		// Analyze input audio (when not normalizing — Convert() handles analysis internally for two-pass normalization)
+		var inputStats converter.AudioStats
+		if !opts.Normalize {
+			var err error
+			inputStats, err = converter.AnalyzeAudio(inputPath)
+			if err != nil {
+				log.Printf("Job %s: INPUT analysis failed — %v", jobID, err)
+			} else {
+				log.Printf("Job %s: INPUT  stats — %s", jobID, inputStats.FormatStats())
+			}
+		}
+
+		// Run conversion (two-pass normalization happens inside Convert when enabled)
 		result := converter.Convert(opts)
 		if !result.Success {
 			log.Printf("Job %s: FAILED — %s", jobID, result.Error)
@@ -133,14 +148,34 @@ func ConvertHandler(maxUploadMB int64) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("Job %s: SUCCESS — %s", jobID, outputName)
+		// Use input stats from Convert's two-pass when available
+		if opts.Normalize {
+			inputStats = result.InputStats
+			log.Printf("Job %s: INPUT  stats — %s", jobID, inputStats.FormatStats())
+		}
+
+		// Analyze output audio after conversion
+		outputStats, err := converter.AnalyzeAudio(outputPath)
+		if err != nil {
+			log.Printf("Job %s: OUTPUT analysis failed — %v", jobID, err)
+		} else {
+			log.Printf("Job %s: OUTPUT stats — %s", jobID, outputStats.FormatStats())
+		}
+
+		log.Printf("Job %s: SUCCESS — %s (target: %.1f dB)", jobID, outputName, opts.TargetDB)
 
 		// Send converted file as download
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, outputName))
 		w.Header().Set("Content-Type", "audio/wav")
 		w.Header().Set("X-Job-ID", jobID)
 		w.Header().Set("X-File-Type", fileType.Label)
-		w.Header().Set("X-Normalization-DB", fmt.Sprintf("%.1f", fileType.TargetDB))
+		w.Header().Set("X-Normalization-DB", fmt.Sprintf("%.1f", opts.TargetDB))
+		w.Header().Set("X-Input-Loudness", fmt.Sprintf("%.1f", inputStats.InputLoudness))
+		w.Header().Set("X-Input-Peak", fmt.Sprintf("%.1f", inputStats.InputTruePeak))
+		w.Header().Set("X-Input-LRA", fmt.Sprintf("%.1f", inputStats.InputLRA))
+		w.Header().Set("X-Output-Loudness", fmt.Sprintf("%.1f", outputStats.InputLoudness))
+		w.Header().Set("X-Output-Peak", fmt.Sprintf("%.1f", outputStats.InputTruePeak))
+		w.Header().Set("X-Output-LRA", fmt.Sprintf("%.1f", outputStats.InputLRA))
 
 		convertedFile, err := os.Open(outputPath)
 		if err != nil {
@@ -204,6 +239,11 @@ func parseConvertOptions(r *http.Request) converter.ConvertOptions {
 
 	if _, ok := converter.Formats[opts.Format]; !ok {
 		opts.Format = "wav-pcm"
+	}
+
+	// Parse user-specified normalization target (0 means "use prefix default")
+	if targetDB, err := strconv.ParseFloat(r.FormValue("target_db"), 64); err == nil && targetDB != 0 {
+		opts.TargetDB = targetDB
 	}
 
 	if low, err := strconv.ParseFloat(r.FormValue("bandpass_low"), 64); err == nil {

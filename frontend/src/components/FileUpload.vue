@@ -98,6 +98,21 @@
               </div>
               <span class="file-progress-pct">{{ f.progress }}%</span>
             </div>
+            <!-- Audio stats after conversion -->
+            <div v-if="f.status === 'done' && f.audioStats" class="audio-stats">
+              <div class="stats-row">
+                <span class="stats-label">IN</span>
+                <span class="stats-tag stats-loudness">{{ f.audioStats.inputLoudness?.toFixed(1) }} LUFS</span>
+                <span class="stats-tag stats-peak">Peak {{ f.audioStats.inputPeak?.toFixed(1) }} dB</span>
+                <span class="stats-tag stats-lra">LRA {{ f.audioStats.inputLRA?.toFixed(1) }}</span>
+              </div>
+              <div class="stats-row">
+                <span class="stats-label">OUT</span>
+                <span class="stats-tag stats-loudness">{{ f.audioStats.outputLoudness?.toFixed(1) }} LUFS</span>
+                <span class="stats-tag stats-peak">Peak {{ f.audioStats.outputPeak?.toFixed(1) }} dB</span>
+                <span class="stats-tag stats-lra">LRA {{ f.audioStats.outputLRA?.toFixed(1) }}</span>
+              </div>
+            </div>
           </div>
 
           <!-- Per-file download button when done -->
@@ -394,5 +409,47 @@ function prefixBadgeClass(prefix) {
 .file-remove:hover {
   color: var(--accent-red);
   background: rgba(239, 68, 68, 0.1);
+}
+
+/* Audio stats */
+.audio-stats {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stats-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  width: 24px;
+  flex-shrink: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.stats-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+}
+.stats-loudness {
+  background: rgba(59, 130, 246, 0.12);
+  color: rgba(96, 165, 250, 0.9);
+}
+.stats-peak {
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(245, 158, 11, 0.9);
+}
+.stats-lra {
+  background: rgba(139, 92, 246, 0.12);
+  color: rgba(167, 139, 250, 0.9);
 }
 </style>

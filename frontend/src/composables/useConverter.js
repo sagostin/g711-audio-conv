@@ -17,6 +17,7 @@ export function useConverter() {
     const options = reactive({
         format: 'wav-pcm',
         normalize: true,
+        targetDb: -6,
         bandpass: false,
         bandpassLow: 300,
         bandpassHigh: 3400,
@@ -87,6 +88,7 @@ export function useConverter() {
             error: '',
             resultBlob: null,
             resultFilename: '',
+            audioStats: null,  // { inputLoudness, inputPeak, inputLRA, outputLoudness, outputPeak, outputLRA }
         }))
         files.value = [...files.value, ...newFiles]
     }
@@ -142,12 +144,13 @@ export function useConverter() {
         formData.append('file', fileEntry.file)
         formData.append('format', options.format)
         formData.append('normalize', options.normalize ? 'true' : 'false')
+        formData.append('target_db', options.targetDb.toString())
         formData.append('bandpass', options.bandpass ? 'true' : 'false')
         formData.append('bandpass_low', options.bandpassLow.toString())
         formData.append('bandpass_high', options.bandpassHigh.toString())
 
         try {
-            const blob = await uploadWithProgress(
+            const { blob, headers } = await uploadWithProgress(
                 `${API_BASE}/convert`,
                 formData,
                 (progress) => {
@@ -157,6 +160,17 @@ export function useConverter() {
 
             fileEntry.status = 'done'
             fileEntry.resultBlob = blob
+
+            // Capture audio stats from response headers
+            fileEntry.audioStats = {
+                inputLoudness: parseFloat(headers.get('X-Input-Loudness')) || null,
+                inputPeak: parseFloat(headers.get('X-Input-Peak')) || null,
+                inputLRA: parseFloat(headers.get('X-Input-LRA')) || null,
+                outputLoudness: parseFloat(headers.get('X-Output-Loudness')) || null,
+                outputPeak: parseFloat(headers.get('X-Output-Peak')) || null,
+                outputLRA: parseFloat(headers.get('X-Output-LRA')) || null,
+                targetDb: parseFloat(headers.get('X-Normalization-DB')) || null,
+            }
 
             // Determine output filename
             const baseName = fileEntry.name.replace(/\.[^.]+$/, '')
@@ -182,7 +196,13 @@ export function useConverter() {
 
             xhr.addEventListener('load', () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    resolve(xhr.response)
+                    // Build a headers-like object from XHR
+                    const headersObj = {
+                        get(name) {
+                            return xhr.getResponseHeader(name)
+                        }
+                    }
+                    resolve({ blob: xhr.response, headers: headersObj })
                 } else {
                     reject(new Error(xhr.responseText || `Server error: ${xhr.status}`))
                 }
