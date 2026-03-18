@@ -3,7 +3,6 @@ package converter
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -82,22 +81,22 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 
 // BuildNormalizationFilters constructs the filter chain for normalization:
 //
-//  1. dynaudnorm — frame-by-frame adaptive gain control. Quiet sections are
-//     boosted up to the target and loud sections are attenuated down to it,
-//     so the entire file sits at a uniform level. The peak target (p) is set
-//     to the linear amplitude of targetDB (e.g. -6 dB → 0.501).
+//  1. dynaudnorm — frame-by-frame adaptive gain that brings all sections up
+//     to near 0 dBFS (p=0.95). This evens out the entire file.
 //
-//  2. alimiter — brick-wall limiter as a safety net. Hard-caps any transient
-//     peaks that dynaudnorm didn't fully catch. Nothing exceeds the target.
+//  2. compand — applies a hard transfer function that acts as an absolute
+//     ceiling. The points define a piecewise curve:
+//     -80 dB → -80 dB  (silence stays silent)
+//     target → target   (at the target, pass through)
+//     0 dB   → target   (everything above target → clamped to target)
+//     This is a sample-level operation — no transient can escape the ceiling.
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
-	// Convert target dB to linear amplitude (e.g. -6 dB → 0.501)
-	limit := math.Pow(10, targetDB/20.0)
-
 	return []string{
-		// Step 1: Adaptive leveling — boost valleys, attenuate peaks to target
-		fmt.Sprintf("dynaudnorm=p=%.4f:s=5", limit),
-		// Step 2: Brick-wall limiter — hard ceiling at target, nothing louder
-		fmt.Sprintf("alimiter=limit=%f:level_in=1:level_out=1:attack=0.1:release=50", limit),
+		// Step 1: Adaptive leveling — boost everything up to near 0 dBFS
+		"dynaudnorm=p=0.95:s=5",
+		// Step 2: Hard ceiling — clamp everything above target to target
+		fmt.Sprintf("compand=attacks=0:decays=0:points=-80/-80|%.1f/%.1f|0/%.1f",
+			targetDB, targetDB, targetDB),
 	}
 }
 
