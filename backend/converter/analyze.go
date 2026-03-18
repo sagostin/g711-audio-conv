@@ -79,29 +79,29 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 	return stats, nil
 }
 
-// BuildNormalizationFilters constructs filters for telephony-grade normalization.
+// BuildNormalizationFilters constructs the second-pass loudnorm filter for
+// EBU R128 normalization.
 //
-// The chain does two things:
-//
-//  1. dynaudnorm — adaptive frame-by-frame gain control that evens out the audio:
-//     quiet sections are brought up, loud sections are held steady. This makes the
-//     whole file sound roughly the same level (like an AGC / compressor).
-//     Output peaks land near 0 dBFS.
-//
-//  2. volume — since dynaudnorm brings peaks to ~0 dBFS, this simple scalar
-//     shifts the entire waveform down to the exact target dB ceiling.
-//     Nothing can exceed the target.
+// Pass 1 (AnalyzeAudio) measures the input's loudness statistics. This function
+// builds the Pass 2 filter that feeds those measurements back into loudnorm so
+// it can apply a precise linear gain adjustment to hit the target LUFS.
 //
 // Parameters:
-//   - p=0.95: dynaudnorm peak target (95% = -0.45 dBFS headroom)
-//   - s=5: 5-second smoothing window for natural-sounding gain changes
-//   - targetDB: applied as a volume scalar after dynaudnorm flattening
+//   - targetDB: desired integrated loudness in LUFS (e.g. -6 for auto attendant)
+//   - stats: measured loudness from Pass 1
+//   - TP=-1.5: true peak ceiling to prevent clipping
+//   - LRA=11: generous loudness range allowance (won't over-compress)
+//   - linear=true: single linear gain — preserves original dynamics
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
 	return []string{
-		// Step 1: Compress dynamic range — even out all levels
-		"dynaudnorm=p=0.95:s=5",
-		// Step 2: Scale peak to target (dynaudnorm outputs near 0 dBFS)
-		fmt.Sprintf("volume=%.2fdB", targetDB),
+		fmt.Sprintf(
+			"loudnorm=I=%.1f:TP=-1.5:LRA=11:measured_I=%.2f:measured_TP=%.2f:measured_LRA=%.2f:measured_thresh=%.2f:offset=0:linear=true:print_format=summary",
+			targetDB,
+			stats.InputLoudness,
+			stats.InputTruePeak,
+			stats.InputLRA,
+			stats.InputThreshold,
+		),
 	}
 }
 
