@@ -82,28 +82,20 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 
 // BuildNormalizationFilters constructs the filter chain for normalization:
 //
-//  1. loudnorm (two-pass, linear) — adjusts integrated loudness to the target
-//     LUFS using measured stats from Pass 1. True peak ceiling is set to the
-//     target so loudnorm itself avoids exceeding it.
+//  1. dynaudnorm — frame-by-frame adaptive gain control. Quiet sections are
+//     boosted up to the target and loud sections are attenuated down to it,
+//     so the entire file sits at a uniform level. The peak target (p) is set
+//     to the linear amplitude of targetDB (e.g. -6 dB → 0.501).
 //
-//  2. alimiter (brick-wall limiter) — hard ceiling at the target dB. Any
-//     transient peaks that still exceed the target are transparently limited.
-//     Nothing in the output will be louder than the target.
+//  2. alimiter — brick-wall limiter as a safety net. Hard-caps any transient
+//     peaks that dynaudnorm didn't fully catch. Nothing exceeds the target.
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
-	// Convert target dB to linear amplitude for alimiter (e.g. -6 dB → 0.501)
+	// Convert target dB to linear amplitude (e.g. -6 dB → 0.501)
 	limit := math.Pow(10, targetDB/20.0)
 
 	return []string{
-		// Step 1: Normalize integrated loudness to target LUFS
-		fmt.Sprintf(
-			"loudnorm=I=%.1f:TP=%.1f:LRA=11:measured_I=%.2f:measured_TP=%.2f:measured_LRA=%.2f:measured_thresh=%.2f:offset=0:linear=true:print_format=summary",
-			targetDB,
-			targetDB,
-			stats.InputLoudness,
-			stats.InputTruePeak,
-			stats.InputLRA,
-			stats.InputThreshold,
-		),
+		// Step 1: Adaptive leveling — boost valleys, attenuate peaks to target
+		fmt.Sprintf("dynaudnorm=p=%.4f:s=5", limit),
 		// Step 2: Brick-wall limiter — hard ceiling at target, nothing louder
 		fmt.Sprintf("alimiter=limit=%f:level_in=1:level_out=1:attack=0.1:release=50", limit),
 	}
