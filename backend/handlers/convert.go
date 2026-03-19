@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"tops-audio-conv/converter"
 )
@@ -118,10 +119,15 @@ func ConvertHandler(maxUploadMB int64) http.HandlerFunc {
 		}
 		dst.Close()
 
-		// Determine output filename
+		// Determine output filename: strip prefix, add timestamp
 		format := converter.Formats[opts.Format]
 		baseName := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
-		outputName := baseName + "_converted" + format.Extension
+		// Strip the detected prefix (e.g. aa_, mbx_, moh_)
+		if fileType.Prefix != "" && strings.HasPrefix(strings.ToLower(baseName), fileType.Prefix) {
+			baseName = baseName[len(fileType.Prefix):]
+		}
+		ts := time.Now().Format("20060102-150405")
+		outputName := baseName + "_c-" + ts + format.Extension
 		outputPath := filepath.Join(outputDir, outputName)
 
 		// Set conversion paths

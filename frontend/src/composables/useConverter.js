@@ -172,9 +172,25 @@ export function useConverter() {
                 targetDb: parseFloat(headers.get('X-Normalization-DB')) || null,
             }
 
-            // Determine output filename
-            const baseName = fileEntry.name.replace(/\.[^.]+$/, '')
-            fileEntry.resultFilename = baseName + '_converted.wav'
+            // Determine output filename: strip prefix, add timestamp
+            let baseName = fileEntry.name.replace(/\.[^.]+$/, '')
+            // Strip the detected prefix (e.g. aa_, mbx_, moh_)
+            if (fileEntry.prefix && fileEntry.prefix.prefix) {
+                const pfx = fileEntry.prefix.prefix
+                if (baseName.toLowerCase().startsWith(pfx)) {
+                    baseName = baseName.substring(pfx.length)
+                }
+            }
+            // Append _c-TIMESTAMP in browser-local time
+            const now = new Date()
+            const ts = now.getFullYear().toString()
+                + String(now.getMonth() + 1).padStart(2, '0')
+                + String(now.getDate()).padStart(2, '0')
+                + '-'
+                + String(now.getHours()).padStart(2, '0')
+                + String(now.getMinutes()).padStart(2, '0')
+                + String(now.getSeconds()).padStart(2, '0')
+            fileEntry.resultFilename = baseName + '_c-' + ts + '.wav'
 
         } catch (err) {
             fileEntry.status = 'error'
@@ -246,7 +262,15 @@ export function useConverter() {
         const url = URL.createObjectURL(zipBlob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'converted_audio.zip'
+        const now = new Date()
+        const ts = now.getFullYear().toString()
+            + String(now.getMonth() + 1).padStart(2, '0')
+            + String(now.getDate()).padStart(2, '0')
+            + '-'
+            + String(now.getHours()).padStart(2, '0')
+            + String(now.getMinutes()).padStart(2, '0')
+            + String(now.getSeconds()).padStart(2, '0')
+        a.download = 'converted_audio_' + ts + '.zip'
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

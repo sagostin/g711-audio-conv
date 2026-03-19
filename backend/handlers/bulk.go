@@ -128,7 +128,12 @@ func BulkConvertHandler(maxUploadMB int64) http.HandlerFunc {
 			fileOpts := opts
 			fileOpts.InputPath = audioFile
 			nameNoExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
-			outputName := nameNoExt + "_converted" + format.Extension
+			// Strip the detected prefix (e.g. aa_, mbx_, moh_)
+			if fileType.Prefix != "" && strings.HasPrefix(strings.ToLower(nameNoExt), fileType.Prefix) {
+				nameNoExt = nameNoExt[len(fileType.Prefix):]
+			}
+			ts := time.Now().Format("20060102-150405")
+			outputName := nameNoExt + "_c-" + ts + format.Extension
 			fileOpts.OutputPath = filepath.Join(outputDir, outputName)
 
 			if fileOpts.Normalize {
@@ -186,7 +191,8 @@ func BulkConvertHandler(maxUploadMB int64) http.HandlerFunc {
 		log.Printf("Job %s: bulk complete — %d success, %d failed", jobID, successCount, failCount)
 
 		// Create output ZIP
-		outputZipName := strings.TrimSuffix(header.Filename, ".zip") + "_converted.zip"
+		ts := time.Now().Format("20060102-150405")
+		outputZipName := strings.TrimSuffix(header.Filename, ".zip") + "_c-" + ts + ".zip"
 		outputZipPath := filepath.Join(jobDir, outputZipName)
 		if err := createZip(outputDir, outputZipPath); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create output ZIP: %v", err), http.StatusInternalServerError)
