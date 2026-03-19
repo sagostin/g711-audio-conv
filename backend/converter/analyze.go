@@ -81,19 +81,22 @@ func parseLoudnormJSON(output string) (AudioStats, error) {
 
 // BuildNormalizationFilters constructs the filter chain for normalization:
 //
-//  1. dynaudnorm — frame-by-frame adaptive gain that brings all sections up
-//     to near 0 dBFS (p=0.95). This evens out the entire file.
+//  1. volume — applies a single linear gain so the file's true peak lands at
+//     the target dB. Gain = targetDB − inputTruePeak. This scales the entire
+//     file uniformly: quiet parts stay proportionally quiet, no distortion.
 //
-//  2. compand — applies a hard transfer function that acts as an absolute
-//     ceiling. The points define a piecewise curve:
+//  2. compand — hard ceiling (safety net). Clamps any sample above the target
+//     down to exactly the target. Points:
 //     -80 dB → -80 dB  (silence stays silent)
 //     target → target   (at the target, pass through)
 //     0 dB   → target   (everything above target → clamped to target)
-//     This is a sample-level operation — no transient can escape the ceiling.
 func BuildNormalizationFilters(stats AudioStats, targetDB float64) []string {
+	// Linear gain: scale the entire file so its peak aligns with the target
+	gainDB := targetDB - stats.InputTruePeak
+
 	return []string{
-		// Step 1: Adaptive leveling — boost everything up to near 0 dBFS
-		"dynaudnorm=p=0.95:s=5",
+		// Step 1: Uniform gain — shift entire file by gainDB
+		fmt.Sprintf("volume=%.2fdB", gainDB),
 		// Step 2: Hard ceiling — clamp everything above target to target
 		fmt.Sprintf("compand=attacks=0:decays=0:points=-80/-80|%.1f/%.1f|0/%.1f",
 			targetDB, targetDB, targetDB),
