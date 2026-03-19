@@ -13,6 +13,7 @@ const defaultPrefixes = [
 export function useConverter() {
     // State
     const files = ref([])
+    const showCelebration = ref(false)
 
     const options = reactive({
         format: 'wav-pcm',
@@ -246,6 +247,7 @@ export function useConverter() {
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
+        triggerCelebration()
     }
 
     // Download all converted files as a ZIP
@@ -275,6 +277,18 @@ export function useConverter() {
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
+        triggerCelebration()
+    }
+
+    // Easter egg celebration
+    function triggerCelebration() {
+        if (document.body.classList.contains('easter-egg')) {
+            showCelebration.value = true
+        }
+    }
+
+    function dismissCelebration() {
+        showCelebration.value = false
     }
 
     // Load formats from backend
@@ -315,6 +329,7 @@ export function useConverter() {
         errorFiles,
         overallStatus,
         overallProgress,
+        showCelebration,
         detectPrefix,
         addFiles,
         removeFile,
@@ -322,6 +337,7 @@ export function useConverter() {
         convertAll,
         downloadFile,
         downloadAllAsZip,
+        dismissCelebration,
         loadFormats,
         loadPrefixes,
     }

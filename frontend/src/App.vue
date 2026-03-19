@@ -115,6 +115,13 @@
         </footer>
       </div>
     </main>
+
+    <!-- Easter egg celebration overlay -->
+    <CelebrationOverlay
+      v-if="showCelebration"
+      :visible="showCelebration"
+      @dismiss="dismissCelebration"
+    />
   </div>
 </template>
 
@@ -124,6 +131,7 @@ import FileUpload from './components/FileUpload.vue'
 import ConversionOptions from './components/ConversionOptions.vue'
 import ProgressTracker from './components/ProgressTracker.vue'
 import ResultsPanel from './components/ResultsPanel.vue'
+import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import { useConverter } from './composables/useConverter.js'
 
 const {
@@ -148,6 +156,8 @@ const {
   downloadAllAsZip,
   loadFormats,
   loadPrefixes,
+  showCelebration,
+  dismissCelebration,
 } = useConverter()
 
 const convertButtonLabel = computed(() => {
