@@ -29,10 +29,10 @@ export function useConverter() {
 
     const presetOptions = [
         { id: 'global', label: 'Global (Custom)', description: 'Use global settings' },
-        { id: 'bicom_', label: 'Bicom Greeting', targetDb: -12, description: '-12 dBI peak' },
-        { id: 'aa_', label: 'Auto Attendant', targetDb: -6, description: '-6 dB peak' },
-        { id: 'mbx_', label: 'Mailbox', targetDb: -6, description: '-6 dB peak' },
-        { id: 'moh_', label: 'Hold Music', targetDb: -20, description: '-20 dB peak' },
+        { id: 'bicom_', label: 'Bicom Greeting', format: 'wav-pcm', targetDb: -12, description: '8kHz WAV, -12 dBI peak' },
+        { id: 'aa_', label: 'Auto Attendant', format: 'wav-pcm', targetDb: -6, description: '8kHz WAV, -6 dB peak' },
+        { id: 'mbx_', label: 'Mailbox', format: 'wav-pcm', targetDb: -6, description: '8kHz WAV, -6 dB peak' },
+        { id: 'moh_', label: 'Hold Music', format: 'wav-pcm', targetDb: -20, description: '8kHz WAV, -20 dB peak' },
     ]
 
     const formats = ref([
@@ -104,9 +104,14 @@ export function useConverter() {
         if (presetId === 'global') return
 
         const preset = presetOptions.find(p => p.id === presetId)
-        if (preset && preset.targetDb !== undefined) {
-            options.targetDb = preset.targetDb
-            options.normalize = true
+        if (preset) {
+            if (preset.targetDb !== undefined) {
+                options.targetDb = preset.targetDb
+                options.normalize = true
+            }
+            if (preset.format) {
+                options.format = preset.format
+            }
         }
     }
 
@@ -185,10 +190,11 @@ export function useConverter() {
     async function convertSingleFile(fileEntry) {
         const effPreset = effectivePreset(fileEntry)
         const effTargetDb = effPreset ? effPreset.targetDb : options.targetDb
+        const effFormat = effPreset && effPreset.format ? effPreset.format : options.format
 
         const formData = new FormData()
         formData.append('file', fileEntry.file)
-        formData.append('format', options.format)
+        formData.append('format', effFormat)
         formData.append('normalize', options.normalize ? 'true' : 'false')
         formData.append('target_db', effTargetDb.toString())
         formData.append('bandpass', options.bandpass ? 'true' : 'false')
@@ -220,9 +226,10 @@ export function useConverter() {
 
             // Determine output filename: strip prefix, add timestamp
             let baseName = fileEntry.name.replace(/\.[^.]+$/, '')
-            // Strip the detected prefix (e.g. aa_, mbx_, moh_)
-            if (fileEntry.prefix && fileEntry.prefix.prefix) {
-                const pfx = fileEntry.prefix.prefix
+            // Strip the effective prefix (either auto-detected or manual override)
+            const prefixToStrip = fileEntry.presetOverride || (fileEntry.prefix && fileEntry.prefix.prefix) || ''
+            if (prefixToStrip) {
+                const pfx = prefixToStrip
                 if (baseName.toLowerCase().startsWith(pfx)) {
                     baseName = baseName.substring(pfx.length)
                 }
