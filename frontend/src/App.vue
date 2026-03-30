@@ -53,6 +53,7 @@
                 @remove="removeFile"
                 @clear="clearFiles"
                 @download="downloadFile"
+                @set-file-preset="setFilePreset"
               />
             </div>
 
@@ -98,8 +99,11 @@
                 :options="options"
                 :formats="formats"
                 :prefixes="prefixes"
+                :selectedPreset="selectedPreset"
+                :presetOptions="presetOptions"
                 :disabled="isProcessing"
                 @update:options="Object.assign(options, $event)"
+                @set-preset="setPreset"
               />
             </div>
           </div>
@@ -139,6 +143,8 @@ const {
   options,
   formats,
   prefixes,
+  selectedPreset,
+  presetOptions,
   isProcessing,
   hasFiles,
   hasPendingFiles,
@@ -156,6 +162,8 @@ const {
   downloadAllAsZip,
   loadFormats,
   loadPrefixes,
+  setPreset,
+  setFilePreset,
   showCelebration,
   dismissCelebration,
 } = useConverter()

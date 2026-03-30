@@ -85,10 +85,18 @@
             <span class="file-name">{{ f.name }}</span>
             <div class="file-meta">
               <span class="file-size">{{ formatSize(f.size) }}</span>
-              <span v-if="f.prefix && f.prefix.prefix" class="badge" :class="prefixBadgeClass(f.prefix)">
-                {{ f.prefix.description }} ({{ f.prefix.targetDb }}dB)
-              </span>
-              <span v-else class="badge badge-blue">Standard (-6dB)</span>
+              <select
+                class="preset-override-select"
+                :value="f.presetOverride || ''"
+                @change="$emit('set-file-preset', f.id, $event.target.value || null)"
+                :disabled="disabled || f.status === 'converting' || f.status === 'done'"
+              >
+                <option value="">Auto ({{ getEffectivePresetLabel(f) }})</option>
+                <option value="bicom_">Bicom Greeting</option>
+                <option value="aa_">Auto Attendant</option>
+                <option value="mbx_">Mailbox</option>
+                <option value="moh_">Hold Music</option>
+              </select>
               <span v-if="f.status === 'error'" class="file-error-text">{{ f.error }}</span>
             </div>
             <!-- Per-file progress bar during conversion -->
@@ -153,7 +161,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['add', 'remove', 'clear', 'download'])
+const emit = defineEmits(['add', 'remove', 'clear', 'download', 'set-file-preset'])
 
 const isDragging = ref(false)
 const fileInput = ref(null)
@@ -190,11 +198,28 @@ function formatSize(bytes) {
 
 function prefixBadgeClass(prefix) {
   switch (prefix.label) {
+    case 'bicom_greeting': return 'badge-cyan'
     case 'auto_attendant': return 'badge-green'
     case 'mailbox_greeting': return 'badge-amber'
     case 'hold_music': return 'badge-purple'
     default: return 'badge-blue'
   }
+}
+
+function getEffectivePresetLabel(fileEntry) {
+  if (fileEntry.presetOverride) {
+    const labels = {
+      'bicom_': 'Bicom',
+      'aa_': 'AA',
+      'mbx_': 'Mailbox',
+      'moh_': 'MOH'
+    }
+    return labels[fileEntry.presetOverride] || 'Global'
+  }
+  if (fileEntry.prefix && fileEntry.prefix.prefix) {
+    return fileEntry.prefix.description || fileEntry.prefix.label
+  }
+  return 'Global'
 }
 </script>
 
@@ -340,6 +365,24 @@ function prefixBadgeClass(prefix) {
   gap: 8px;
   margin-top: 2px;
   flex-wrap: wrap;
+}
+.preset-override-select {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.preset-override-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.preset-override-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
 }
 .file-size {
   font-size: 12px;

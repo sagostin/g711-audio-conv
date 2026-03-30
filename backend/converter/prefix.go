@@ -14,6 +14,12 @@ type FileType struct {
 }
 
 var prefixMap = map[string]FileType{
+	"bicom_": {
+		Prefix:      "bicom_",
+		Label:       "bicom_greeting",
+		TargetDB:    -12,
+		Description: "Bicom Greeting",
+	},
 	"aa_": {
 		Prefix:      "aa_",
 		Label:       "auto_attendant",

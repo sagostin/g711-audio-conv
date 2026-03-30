@@ -5,6 +5,7 @@ const API_BASE = '/api'
 
 // Prefix configs (loaded from backend, with fallback)
 const defaultPrefixes = [
+    { prefix: 'bicom_', label: 'bicom_greeting', targetDb: -12, description: 'Bicom Greeting' },
     { prefix: 'aa_', label: 'auto_attendant', targetDb: -6, description: 'Auto Attendant' },
     { prefix: 'mbx_', label: 'mailbox_greeting', targetDb: -6, description: 'Mailbox Greeting' },
     { prefix: 'moh_', label: 'hold_music', targetDb: -20, description: 'Hold Music' },
@@ -23,6 +24,16 @@ export function useConverter() {
         bandpassLow: 300,
         bandpassHigh: 3400,
     })
+
+    const selectedPreset = ref('global')
+
+    const presetOptions = [
+        { id: 'global', label: 'Global (Custom)', description: 'Use global settings' },
+        { id: 'bicom_', label: 'Bicom Greeting', targetDb: -12, description: '-12 dBI peak' },
+        { id: 'aa_', label: 'Auto Attendant', targetDb: -6, description: '-6 dB peak' },
+        { id: 'mbx_', label: 'Mailbox', targetDb: -6, description: '-6 dB peak' },
+        { id: 'moh_', label: 'Hold Music', targetDb: -20, description: '-20 dB peak' },
+    ]
 
     const formats = ref([
         { id: 'wav-pcm', label: 'Standard WAV (8kHz, 16-bit PCM)', sampleRate: 8000 },
@@ -76,6 +87,29 @@ export function useConverter() {
         return { prefix: '', label: 'unknown', targetDb: -6, description: 'Standard' }
     }
 
+    // Get effective preset for a file (inline override > filename match > global)
+    function effectivePreset(fileEntry) {
+        if (fileEntry.presetOverride) {
+            return prefixes.value.find(p => p.prefix === fileEntry.presetOverride) || null
+        }
+        if (fileEntry.prefix && fileEntry.prefix.prefix) {
+            return fileEntry.prefix
+        }
+        return null  // global settings will apply
+    }
+
+    // Apply a preset to global options
+    function setPreset(presetId) {
+        selectedPreset.value = presetId
+        if (presetId === 'global') return
+
+        const preset = presetOptions.find(p => p.id === presetId)
+        if (preset && preset.targetDb !== undefined) {
+            options.targetDb = preset.targetDb
+            options.normalize = true
+        }
+    }
+
     // Add files from input or drop
     function addFiles(fileList) {
         const newFiles = Array.from(fileList).map(f => ({
@@ -84,6 +118,7 @@ export function useConverter() {
             name: f.name,
             size: f.size,
             prefix: detectPrefix(f.name),
+            presetOverride: null,  // null | 'bicom_' | 'aa_' | 'mbx_' | 'moh_'
             status: 'pending',  // pending | converting | done | error
             progress: 0,
             error: '',
@@ -100,6 +135,13 @@ export function useConverter() {
             URL.revokeObjectURL(file._objectUrl)
         }
         files.value = files.value.filter(f => f.id !== id)
+    }
+
+    function setFilePreset(id, presetOverride) {
+        const file = files.value.find(f => f.id === id)
+        if (file) {
+            file.presetOverride = presetOverride || null
+        }
     }
 
     function clearFiles() {
@@ -141,11 +183,14 @@ export function useConverter() {
 
     // Convert a single file via /api/convert
     async function convertSingleFile(fileEntry) {
+        const effPreset = effectivePreset(fileEntry)
+        const effTargetDb = effPreset ? effPreset.targetDb : options.targetDb
+
         const formData = new FormData()
         formData.append('file', fileEntry.file)
         formData.append('format', options.format)
         formData.append('normalize', options.normalize ? 'true' : 'false')
-        formData.append('target_db', options.targetDb.toString())
+        formData.append('target_db', effTargetDb.toString())
         formData.append('bandpass', options.bandpass ? 'true' : 'false')
         formData.append('bandpass_low', options.bandpassLow.toString())
         formData.append('bandpass_high', options.bandpassHigh.toString())
@@ -320,6 +365,8 @@ export function useConverter() {
         options,
         formats,
         prefixes,
+        selectedPreset,
+        presetOptions,
         isProcessing,
         hasFiles,
         hasPendingFiles,
@@ -331,6 +378,9 @@ export function useConverter() {
         overallProgress,
         showCelebration,
         detectPrefix,
+        effectivePreset,
+        setPreset,
+        setFilePreset,
         addFiles,
         removeFile,
         clearFiles,

@@ -8,6 +8,21 @@
       Conversion Options
     </h3>
 
+    <!-- Preset Dropdown -->
+    <div class="form-group">
+      <label class="form-label">Preset</label>
+      <select
+        class="form-select"
+        :value="selectedPreset"
+        @change="$emit('set-preset', $event.target.value)"
+        :disabled="disabled"
+      >
+        <option v-for="p in presetOptions" :key="p.id" :value="p.id">
+          {{ p.label }}{{ p.description ? ' (' + p.description + ')' : '' }}
+        </option>
+      </select>
+    </div>
+
     <!-- Output Format -->
     <div class="form-group">
       <label class="form-label">Output Format</label>
@@ -164,10 +179,12 @@ const props = defineProps({
   options: { type: Object, required: true },
   formats: { type: Array, default: () => [] },
   prefixes: { type: Array, default: () => [] },
+  selectedPreset: { type: String, default: 'global' },
+  presetOptions: { type: Array, default: () => [] },
   disabled: { type: Boolean, default: false },
 })
 
-defineEmits(['update:options'])
+defineEmits(['update:options', 'set-preset'])
 
 const presets = [
   { label: '-6 dB', value: -6 },
@@ -183,6 +200,7 @@ function clampDb(val) {
 
 function prefixBadgeClass(prefix) {
   switch (prefix.label) {
+    case 'bicom_greeting': return 'badge-cyan'
     case 'auto_attendant': return 'badge-green'
     case 'mailbox_greeting': return 'badge-amber'
     case 'hold_music': return 'badge-purple'
