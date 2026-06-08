@@ -119,6 +119,23 @@
       </label>
     </div>
 
+    <!-- Filename Timestamp Toggle -->
+    <div class="toggle-wrapper">
+      <div class="toggle-label">
+        <span class="toggle-label-text">Append Timestamp to Filename</span>
+        <span class="toggle-label-desc">Add _c-YYYYMMDD-HHMMSS suffix to output files</span>
+      </div>
+      <label class="toggle">
+        <input
+          type="checkbox"
+          :checked="options.appendTimestamp"
+          @change="$emit('update:options', { ...options, appendTimestamp: $event.target.checked })"
+          :disabled="disabled"
+        />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
     <!-- Bandpass Range (shown when enabled) -->
     <Transition name="slide">
       <div v-if="options.bandpass" class="bandpass-range">

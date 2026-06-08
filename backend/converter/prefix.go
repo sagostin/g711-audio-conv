@@ -38,6 +38,12 @@ var prefixMap = map[string]FileType{
 		TargetDB:    -20,
 		Description: "Hold Music",
 	},
+	"yealink_": {
+		Prefix:      "yealink_",
+		Label:       "yealink_ringtone",
+		TargetDB:    -6,
+		Description: "Yealink Ringtone (8kHz, 16-bit PCM)",
+	},
 }
 
 // DefaultFileType is used when no recognized prefix is found.

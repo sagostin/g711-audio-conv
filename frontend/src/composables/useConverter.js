@@ -9,6 +9,7 @@ const defaultPrefixes = [
     { prefix: 'aa_', label: 'auto_attendant', targetDb: -6, description: 'Auto Attendant' },
     { prefix: 'mbx_', label: 'mailbox_greeting', targetDb: -6, description: 'Mailbox Greeting' },
     { prefix: 'moh_', label: 'hold_music', targetDb: -20, description: 'Hold Music' },
+    { prefix: 'yealink_', label: 'yealink_ringtone', targetDb: -6, description: 'Yealink Ringtone (8kHz, 16-bit PCM)' },
 ]
 
 export function useConverter() {
@@ -23,6 +24,7 @@ export function useConverter() {
         bandpass: false,
         bandpassLow: 300,
         bandpassHigh: 3400,
+        appendTimestamp: true,
     })
 
     const selectedPreset = ref('global')
@@ -33,6 +35,7 @@ export function useConverter() {
         { id: 'aa_', label: 'Auto Attendant', format: 'wav-pcm', targetDb: -6, description: '8kHz WAV, -6 dB peak' },
         { id: 'mbx_', label: 'Mailbox', format: 'wav-pcm', targetDb: -6, description: '8kHz WAV, -6 dB peak' },
         { id: 'moh_', label: 'Hold Music', format: 'wav-pcm', targetDb: -20, description: '8kHz WAV, -20 dB peak' },
+        { id: 'yealink_', label: 'Yealink Ringtone', format: 'wav-pcm', targetDb: -6, description: '8kHz WAV, 16-bit PCM, -6 dB peak' },
     ]
 
     const formats = ref([
@@ -224,7 +227,7 @@ export function useConverter() {
                 targetDb: parseFloat(headers.get('X-Normalization-DB')) || null,
             }
 
-            // Determine output filename: strip prefix, add timestamp
+            // Determine output filename: strip prefix, optionally add timestamp
             let baseName = fileEntry.name.replace(/\.[^.]+$/, '')
             // Strip the effective prefix (either auto-detected or manual override)
             const prefixToStrip = fileEntry.presetOverride || (fileEntry.prefix && fileEntry.prefix.prefix) || ''
@@ -234,16 +237,19 @@ export function useConverter() {
                     baseName = baseName.substring(pfx.length)
                 }
             }
-            // Append _c-TIMESTAMP in browser-local time
-            const now = new Date()
-            const ts = now.getFullYear().toString()
-                + String(now.getMonth() + 1).padStart(2, '0')
-                + String(now.getDate()).padStart(2, '0')
-                + '-'
-                + String(now.getHours()).padStart(2, '0')
-                + String(now.getMinutes()).padStart(2, '0')
-                + String(now.getSeconds()).padStart(2, '0')
-            fileEntry.resultFilename = baseName + '_c-' + ts + '.wav'
+            if (options.appendTimestamp) {
+                const now = new Date()
+                const ts = now.getFullYear().toString()
+                    + String(now.getMonth() + 1).padStart(2, '0')
+                    + String(now.getDate()).padStart(2, '0')
+                    + '-'
+                    + String(now.getHours()).padStart(2, '0')
+                    + String(now.getMinutes()).padStart(2, '0')
+                    + String(now.getSeconds()).padStart(2, '0')
+                fileEntry.resultFilename = baseName + '_c-' + ts + '.wav'
+            } else {
+                fileEntry.resultFilename = baseName + '.wav'
+            }
 
         } catch (err) {
             fileEntry.status = 'error'
