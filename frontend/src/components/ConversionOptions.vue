@@ -136,6 +136,23 @@
       </label>
     </div>
 
+    <!-- Strip Special Characters Toggle -->
+    <div class="toggle-wrapper">
+      <div class="toggle-label">
+        <span class="toggle-label-text">Strip Special Characters</span>
+        <span class="toggle-label-desc">Remove non-alphanumeric characters from output filename</span>
+      </div>
+      <label class="toggle">
+        <input
+          type="checkbox"
+          :checked="options.stripSpecialChars"
+          @change="$emit('update:options', { ...options, stripSpecialChars: $event.target.checked })"
+          :disabled="disabled"
+        />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
     <!-- Bandpass Range (shown when enabled) -->
     <Transition name="slide">
       <div v-if="options.bandpass" class="bandpass-range">

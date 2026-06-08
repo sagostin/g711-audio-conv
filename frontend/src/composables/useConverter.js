@@ -25,6 +25,7 @@ export function useConverter() {
         bandpassLow: 300,
         bandpassHigh: 3400,
         appendTimestamp: true,
+        stripSpecialChars: false,
     })
 
     const selectedPreset = ref('global')
@@ -236,6 +237,10 @@ export function useConverter() {
                 if (baseName.toLowerCase().startsWith(pfx)) {
                     baseName = baseName.substring(pfx.length)
                 }
+            }
+            // Strip non-alphanumeric characters if enabled (retains letters/numbers)
+            if (options.stripSpecialChars) {
+                baseName = baseName.replace(/[^a-zA-Z0-9]/g, '')
             }
             if (options.appendTimestamp) {
                 const now = new Date()
