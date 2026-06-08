@@ -29,7 +29,7 @@ var Formats = map[string]OutputFormat{
 	},
 	"wav-ulaw": {
 		ID:         "wav-ulaw",
-		Label:      "G.711 µ-law WAV (8kHz)",
+		Label:      "G.711 µ-law WAV (8kHz, 8-bit)",
 		Extension:  ".wav",
 		SampleRate: 8000,
 		Channels:   1,
@@ -105,7 +105,21 @@ func Convert(opts ConvertOptions) ConvertResult {
 	// Build filter chain
 	var filters []string
 
-	// Bandpass filter (highpass + lowpass)
+	// Linear normalization via volume + hard limiter
+	if opts.Normalize {
+		// Pass 1: Measure input loudness statistics
+		inputStats, err := AnalyzeAudio(opts.InputPath)
+		if err != nil {
+			// Fall back to simple loudnorm if measurement fails
+			filters = append(filters, fmt.Sprintf("loudnorm=I=%.1f:TP=-1.5:LRA=11", opts.TargetDB))
+		} else {
+			result.InputStats = inputStats
+			// Apply exact linear gain + hard limiter (no LRA tolerance)
+			filters = append(filters, BuildNormalizationFilters(inputStats, opts.TargetDB)...)
+		}
+	}
+
+	// Bandpass filter (highpass + lowpass) — always last, as final cleanup step
 	if opts.Bandpass {
 		low := opts.BandpassLow
 		high := opts.BandpassHigh
@@ -119,20 +133,6 @@ func Convert(opts ConvertOptions) ConvertResult {
 		result.BandpassHigh = high
 		filters = append(filters, fmt.Sprintf("highpass=f=%.0f", low))
 		filters = append(filters, fmt.Sprintf("lowpass=f=%.0f", high))
-	}
-
-	// Linear normalization via volume + hard limiter
-	if opts.Normalize {
-		// Pass 1: Measure input loudness statistics
-		inputStats, err := AnalyzeAudio(opts.InputPath)
-		if err != nil {
-			// Fall back to simple loudnorm if measurement fails
-			filters = append(filters, fmt.Sprintf("loudnorm=I=%.1f:TP=-1.5:LRA=11", opts.TargetDB))
-		} else {
-			result.InputStats = inputStats
-			// Apply exact linear gain + hard limiter (no LRA tolerance)
-			filters = append(filters, BuildNormalizationFilters(inputStats, opts.TargetDB)...)
-		}
 	}
 
 	// Build ffmpeg command
