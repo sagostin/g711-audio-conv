@@ -197,6 +197,7 @@ func cleanWav(path string) error {
 		"-i", path,
 		"-map_metadata", "-1",
 		"-c:a", "copy",
+		"-f", "wav",
 		tmpPath,
 	}
 	cmd := exec.Command("ffmpeg", args...)
