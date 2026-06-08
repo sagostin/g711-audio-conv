@@ -179,7 +179,7 @@ func Convert(opts ConvertOptions) ConvertResult {
 	// that may have been in the input file, producing a clean fmt → data layout.
 	// This is critical for strict WAV parsers (e.g., Yealink ringtone player).
 	if strings.HasPrefix(format.ID, "wav-") {
-		if err := cleanWav(opts.OutputPath, format.Codec, format.SampleRate, format.Channels); err != nil {
+		if err := cleanWav(opts.OutputPath); err != nil {
 			log.Printf("cleanWav warning: %v", err)
 		}
 	}
@@ -187,19 +187,16 @@ func Convert(opts ConvertOptions) ConvertResult {
 	return result
 }
 
-// cleanWav re-wraps a WAV file through ffmpeg to produce a clean fmt → data
-// chunk layout, stripping any embedded LIST/INFO/ID3 metadata chunks that
-// some converters leave behind. This is lossless — audio is decoded to raw PCM
-// and re-encoded with the same codec/sample rate/channels.
-func cleanWav(path, codec string, sampleRate, channels int) error {
+// cleanWav re-muxes a WAV file to strip all metadata chunks (LIST/INFO/ID3, etc.)
+// while keeping the audio stream intact. This produces a clean fmt → data chunk
+// layout without re-encoding the audio.
+func cleanWav(path string) error {
 	tmpPath := path + ".clean.tmp"
 	args := []string{
 		"-y",
 		"-i", path,
-		"-acodec", codec,
-		"-ar", fmt.Sprintf("%d", sampleRate),
-		"-ac", fmt.Sprintf("%d", channels),
-		"-f", "wav",
+		"-map_metadata", "-1",
+		"-c:a", "copy",
 		tmpPath,
 	}
 	cmd := exec.Command("ffmpeg", args...)
