@@ -196,6 +196,7 @@ func cleanWav(path string) error {
 		"-y",
 		"-i", path,
 		"-map_metadata", "-1",
+		"-fflags", "+bitexact",
 		"-c:a", "copy",
 		"-f", "wav",
 		tmpPath,
